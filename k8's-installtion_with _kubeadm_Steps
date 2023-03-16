@@ -1,0 +1,246 @@
+
+
+Machine used: Ubuntu 20.04
+
+ssh user@<PUBLIC_IP_ADDRESS>
+
+Install Packages
+=================
+
+Log into the control plane node. (Note: The following steps must be performed on all three nodes.)
+
+
+cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
+overlay
+br_netfilter
+EOF
+
+
+3. Load modules
+-------------------
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+4. Set system configurations for Kubernetes networking:
+---------------------------------------------------------
+
+cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes-cri.conf
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+EOF
+
+5. Apply new settings:
+------------------------
+
+sudo sysctl --system
+
+6. Install containerd:
+-------------------------
+
+sudo apt-get update && sudo apt-get install -y containerd
+
+
+7. Create default configuration file for containerd:
+--------------------------------------------------------
+
+sudo mkdir -p /etc/containerd
+
+8. Generate default containerd configuration and save to the newly created default file:
+-----------------------------------------------------------------------------------------
+
+sudo containerd config default | sudo tee /etc/containerd/config.toml
+
+
+
+9. Restart containerd to ensure new configuration file usage:
+---------------------------------------------------------------
+
+sudo systemctl restart containerd
+
+
+10. Verify that containerd is running:
+---------------------------------------
+
+sudo systemctl status containerd
+
+11. Disable swap:
+-------------------
+
+sudo swapoff -a
+
+
+12. Install dependency packages:
+----------------------------------
+
+sudo apt-get update && sudo apt-get install -y apt-transport-https curl
+
+
+13. Download and add GPG key:
+--------------------------------
+
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+
+14. Add Kubernetes to repository list:
+----------------------------------------
+
+cat <<EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+deb https://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+
+15. Update package listings:
+-----------------------------
+
+sudo apt-get update
+
+16. Install Kubernetes packages (Note: If you get a dpkg lock message, just wait a minute or two before trying the command again):
+-------------------------------------------------------------------------------------------------------------------------------------
+
+sudo apt-get install -y kubelet=1.24.0-00 kubeadm=1.24.0-00 kubectl=1.24.0-00
+
+
+17. Turn off automatic updates:
+--------------------------------
+
+sudo apt-mark hold kubelet kubeadm kubectl
+
+
+Initialize the cluster
+=========================
+
+1. Initialize the Kubernetes cluster on the control plane node using kubeadm (Note: This is only performed on the Control Plane Node):
+--------------------------------------------------------------------------------------------------
+
+sudo kubeadm init --pod-network-cidr 192.168.0.0/16 --kubernetes-version 1.24.0
+
+
+2. Set kubectl access:
+----------------------
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+3. Test access to cluster:
+---------------------------
+
+kubectl get nodes
+
+
+Install the Calico Network Add-On
+===================================
+
+1. On the control plane node, install Calico Networking:  #### MUST FOR COMMUNICATION
+---------------------------------------------------------
+
+kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+
+;;;;;;;;;;;
+ubuntu@control-plane:~$ kubectl get nodes
+NAME            STATUS     ROLES           AGE     VERSION
+control-plane   NotReady   control-plane   5m39s   v1.24.0
+ubuntu@control-plane:~$ 
+;;;;;;;;;;;
+
+
+2. Check status of the control plane node:
+--------------------------------------------
+
+kubectl get nodes
+
+;;;;;;;;;;;
+ubuntu@control-plane:~$ kubectl get nodes
+NAME            STATUS   ROLES           AGE     VERSION
+control-plane   Ready    control-plane   5m41s   v1.24.0
+ubuntu@control-plane:~$ 
+;;;;;;;;;;;
+
+
+;;;;;;;;;;;
+ubuntu@control-plane:~$ kubectl get ns
+NAME              STATUS   AGE
+default           Active   7m19s
+kube-node-lease   Active   7m20s
+kube-public       Active   7m20s
+kube-system       Active   7m20s
+
+
+ubuntu@control-plane:~$ kubectl get po -n kube-system 
+NAME                                       READY   STATUS    RESTARTS   AGE
+calico-kube-controllers-84c476996d-tbzdx   1/1     Running   0          2m19s
+calico-node-nqjzg                          1/1     Running   0          2m19s
+coredns-6d4b75cb6d-ncndp                   1/1     Running   0          7m30s
+coredns-6d4b75cb6d-qbfw9                   1/1     Running   0          7m30s
+etcd-control-plane                         1/1     Running   0          7m34s
+kube-apiserver-control-plane               1/1     Running   0          7m34s
+kube-controller-manager-control-plane      1/1     Running   0          7m34s
+kube-proxy-6mmjq                           1/1     Running   0          7m30s
+kube-scheduler-control-plane               1/1     Running   0          7m34s
+ubuntu@control-plane:~$ 
+;;;;;;;;;;;
+
+
+
+Join the Worker Nodes to the Cluster
+========================================
+
+1. In the control plane node, create the token and copy the kubeadm join command (NOTE:The join command can also be found in the output from kubeadm init command):
+-------------------------------------------------------------------------------------------------------------------------------------------
+
+kubeadm token create --print-join-command
+
+;;;;;;;;;;;
+ubuntu@control-plane:~$ kubeadm token create --print-join-command
+kubeadm join 10.0.10.190:6443 --token ra9roe.h97lq8ret0h40qt4 --discovery-token-ca-cert-hash sha256:6f9c313288bbcb744023d674205c0dfea7e7e8022d1e0655d7e50ee515833f6f 
+ubuntu@control-plane:~$ 
+;;;;;;;;;;;
+
+
+2. In both worker nodes, paste the kubeadm join command to join the cluster. Use sudo to run it as root:
+----------------------------------------------------------------------------------------------
+
+sudo kubeadm join ...................
+
+
+3. In the control plane node, view cluster status (Note: You may have to wait a few moments to allow all nodes to become ready):
+------------------------------------------------------------------------------------------------------------
+
+kubectl get nodes
+
+;;;;;;;;;;;
+ubuntu@control-plane:~$ kubectl get nodes
+NAME            STATUS   ROLES           AGE   VERSION
+control-plane   Ready    control-plane   32m   v1.24.0
+worker-node-1   Ready    <none>          10m   v1.24.0
+worker-node-2   Ready    <none>          67s   v1.24.0
+;;;;;;;;;;;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
