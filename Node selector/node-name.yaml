@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+    name: node-name
+    labels:
+      app: my-app
+      type: frontend
+
+spec:
+  nodeName: worker-node-2
+  containers:
+  - name: nginx
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+
+#Node name: We can configure the node name on which node we want to create the new pods or apps

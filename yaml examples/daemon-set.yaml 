@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-daemonset
+
+spec:
+  selector:
+    matchLabels:
+            app: my-daemonset
+  template:
+    metadata:
+      labels:
+              app: my-daemonset
+
+    spec:
+            containers:
+                    - name: nginx-daemon
+                      image: nginx:latest
+
+#Running a cluster storage daemon on every node
+#Running a log collection daemon on every node
+#Running a log monitoring daemon on every node
+#Daemon set pods are automatically run in every nodes creating. No need specify the replica. It will run in the all nodes automatically.
